@@ -1,0 +1,21 @@
+{
+  "name": "galway-bus",
+  "description": "Galway Bus Google Assistant information",
+  "version": "0.0.1",
+  "author": "John O'Reilly",
+  "engines": {
+    "node": "~4.2"
+  },
+  "scripts": {
+    "start": "firebase serve --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "actions-on-google": "^1.0.0",
+    "firebase-admin": "^4.2.1",
+    "firebase-functions": "^0.5.7",
+    "request-json": "^0.6.2",
+    "sprintf-js": "^1.1.1"
+  }
+}
