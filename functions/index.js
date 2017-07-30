@@ -4,6 +4,8 @@ const { ApiAiApp } = require('actions-on-google');
 const functions = require('firebase-functions');
 const http = require("http"); 
 const request = require('request-json');
+var moment = require('moment');
+
 
 var galwayBusRestClient = request.createClient('http://galwaybus.herokuapp.com/');
 
@@ -17,22 +19,26 @@ const BUS_NUMBER_PARAM = 'busnumber';
 
 
 const permissionChecker = app => {
+    if (app.data.deviceCoordinates != null) {
+      findClosestBusStop(app, app.data.deviceCoordinates) 
+    } else {
       const permission = app.SupportedPermissions.DEVICE_PRECISE_LOCATION;
       app.askForPermission('To find the closest bus stop', permission);   
+    }
 }
 
 
 const gotPermission = app => {
       if (app.isPermissionGranted()) { 
-          findClosestBusStop(app) 
+          var deviceCoordinates = app.getDeviceLocation().coordinates
+          app.data.deviceCoordinates = deviceCoordinates
+          findClosestBusStop(app, app.data.deviceCoordinates) 
       } else { 
           app.tell("I cannot find when the next bus is coming without your location."); 
       }   
 }
 
-function findClosestBusStop(app) { 
-    var busNumber = app.getContext("request_permission").parameters[BUS_NUMBER_PARAM];
-    var deviceCoordinates = app.getDeviceLocation().coordinates
+function findClosestBusStop(app, deviceCoordinates) { 
     const deviceLatitude = deviceCoordinates.latitude; 
     const deviceLongitude = deviceCoordinates.longitude; 
     galwayBusRestClient.get('stops.json', function(err, res, body) {
@@ -47,7 +53,30 @@ function findClosestBusStop(app) {
             } 
         }
 
-        app.ask("Closest stop = " + closestStop.long_name + ", the " + busNumber + " is here!.  Would you like to lookup another bus?")    
+        galwayBusRestClient.get('stops/' + closestStop.stop_id + '.json', function(err, res, body) {
+            if (body.times.length == 0) {
+              app.ask("No departures from " + closestStop.long_name + " today.  Would you like to lookup another bus?")      
+            } else {
+              var busTime = body.times[0];
+              var nextDepTime = moment(busTime.depart_timestamp)
+
+
+              var message = "";
+              var i;
+              for (i = 0; i < body.times.length; i++) {
+                busTime = body.times[i]
+                message += "**" + busTime.display_name + "** (" + busTime.timetable_id + "): " + moment(busTime.depart_timestamp).fromNow() + "\n"
+              }
+              app.ask(app.buildRichResponse()
+                .addSimpleResponse("Bus " + busTime.timetable_id + " departing " + nextDepTime.fromNow())
+                .addBasicCard(app.buildBasicCard(message)
+                    .setTitle(closestStop.long_name + " (" + closestStop.stop_id + ")")
+                )
+              );
+
+            }
+        });
+
     });
 
 }
@@ -84,7 +113,7 @@ Math.radians = function(degrees) {
 
 /** @type {Map<string, function(ApiAiApp): void>} */
 const actionMap = new Map();
-actionMap.set('bus-requested', permissionChecker); 
+actionMap.set('lookup-bus', permissionChecker); 
 actionMap.set('find-bus', gotPermission); 
 
 /**
